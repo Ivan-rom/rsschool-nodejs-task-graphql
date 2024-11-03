@@ -11,6 +11,8 @@ import {
   GraphQLList,
   GraphQLNonNull,
   GraphQLEnumType,
+  GraphQLScalarType,
+  Kind,
 } from 'graphql';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { DefaultArgs } from '@prisma/client/runtime/library.js';
@@ -40,6 +42,44 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
 };
 
 function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, DefaultArgs>) {
+  const UUID = new GraphQLScalarType({
+    name: 'UUID',
+    description: 'A custom scalar type representing a UUID.',
+    serialize(value) {
+      if (
+        typeof value !== 'string' ||
+        !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+          value,
+        )
+      ) {
+        throw new Error('Invalid UUID format');
+      }
+      return value;
+    },
+    parseValue(value) {
+      if (
+        typeof value !== 'string' ||
+        !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+          value,
+        )
+      ) {
+        throw new Error('Invalid UUID format');
+      }
+      return value;
+    },
+    parseLiteral(ast) {
+      if (
+        ast.kind === Kind.STRING &&
+        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+          ast.value,
+        )
+      ) {
+        return ast.value;
+      }
+      throw new Error('Invalid UUID format');
+    },
+  });
+
   const MemberTypeId = new GraphQLEnumType({
     name: 'MemberTypeId',
     values: {
@@ -60,7 +100,7 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
   const Post = new GraphQLObjectType({
     name: 'Post',
     fields: {
-      id: { type: new GraphQLNonNull(GraphQLString) },
+      id: { type: new GraphQLNonNull(UUID) },
       title: { type: new GraphQLNonNull(GraphQLString) },
       content: { type: new GraphQLNonNull(GraphQLString) },
     },
@@ -69,7 +109,7 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
   const Profile = new GraphQLObjectType({
     name: 'Profile',
     fields: {
-      id: { type: new GraphQLNonNull(GraphQLString) },
+      id: { type: new GraphQLNonNull(UUID) },
       isMale: { type: new GraphQLNonNull(GraphQLBoolean) },
       yearOfBirth: { type: new GraphQLNonNull(GraphQLInt) },
       memberType: { type: new GraphQLNonNull(MemberType) },
@@ -79,7 +119,7 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
   const User: GraphQLObjectType = new GraphQLObjectType({
     name: 'User',
     fields: () => ({
-      id: { type: new GraphQLNonNull(GraphQLString) },
+      id: { type: new GraphQLNonNull(UUID) },
       name: { type: new GraphQLNonNull(GraphQLString) },
       balance: { type: new GraphQLNonNull(GraphQLFloat) },
       profile: { type: Profile },
@@ -115,7 +155,7 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
       user: {
         type: User,
         args: {
-          id: { type: new GraphQLNonNull(GraphQLString) },
+          id: { type: new GraphQLNonNull(UUID) },
         },
         resolve: async (_, { id }: { id: string }) =>
           await prisma.user.findFirst({ where: { id } }),
@@ -127,7 +167,7 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
       post: {
         type: Post,
         args: {
-          id: { type: new GraphQLNonNull(GraphQLString) },
+          id: { type: new GraphQLNonNull(UUID) },
         },
         resolve: async (_, { id }: { id: string }) =>
           await prisma.post.findFirst({ where: { id } }),
@@ -139,7 +179,7 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
       profile: {
         type: Profile,
         args: {
-          id: { type: new GraphQLNonNull(GraphQLString) },
+          id: { type: new GraphQLNonNull(UUID) },
         },
         resolve: async (_, { id }: { id: string }) =>
           await prisma.profile.findFirst({ where: { id } }),
