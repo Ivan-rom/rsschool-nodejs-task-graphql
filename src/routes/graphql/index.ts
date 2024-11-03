@@ -112,9 +112,19 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
       id: { type: new GraphQLNonNull(UUID) },
       isMale: { type: new GraphQLNonNull(GraphQLBoolean) },
       yearOfBirth: { type: new GraphQLNonNull(GraphQLInt) },
-      memberType: { type: new GraphQLNonNull(MemberType) },
+      memberType: {
+        type: new GraphQLNonNull(MemberType),
+        resolve: async (profile: { memberTypeId: string }) =>
+          await prisma.memberType.findFirst({ where: { id: profile.memberTypeId } }),
+      },
     },
   });
+
+  type User = {
+    id: string;
+    userSubscribedTo: string[];
+    subscribedToUser: string[];
+  };
 
   const User: GraphQLObjectType = new GraphQLObjectType({
     name: 'User',
@@ -122,13 +132,41 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
       id: { type: new GraphQLNonNull(UUID) },
       name: { type: new GraphQLNonNull(GraphQLString) },
       balance: { type: new GraphQLNonNull(GraphQLFloat) },
-      profile: { type: Profile },
-      posts: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(Post))) },
+      profile: {
+        type: Profile,
+        resolve: async (user: User) =>
+          await prisma.profile.findFirst({ where: { userId: user.id } }),
+      },
+      posts: {
+        type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(Post))),
+        resolve: async (user: User) =>
+          await prisma.post.findMany({ where: { authorId: user.id } }),
+      },
       userSubscribedTo: {
         type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(User))),
+        resolve: async (user: User) => {
+          const subscribes = await prisma.subscribersOnAuthors.findMany({
+            where: { subscriberId: user.id },
+          });
+
+          return subscribes.map(
+            async ({ authorId }) =>
+              await prisma.user.findFirst({ where: { id: authorId } }),
+          );
+        },
       },
       subscribedToUser: {
         type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(User))),
+        resolve: async (user: User) => {
+          const subscribes = await prisma.subscribersOnAuthors.findMany({
+            where: { authorId: user.id },
+          });
+
+          return subscribes.map(
+            async ({ subscriberId }) =>
+              await prisma.user.findFirst({ where: { id: subscriberId } }),
+          );
+        },
       },
     }),
   });
@@ -140,6 +178,7 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
         type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(MemberType))),
         resolve: async () => await prisma.memberType.findMany(),
       },
+
       memberType: {
         type: MemberType,
         args: {
@@ -148,10 +187,12 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
         resolve: async (_, { id }: { id: string }) =>
           await prisma.memberType.findFirst({ where: { id } }),
       },
+
       users: {
         type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(User))),
         resolve: async () => await prisma.user.findMany(),
       },
+
       user: {
         type: User,
         args: {
@@ -160,10 +201,12 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
         resolve: async (_, { id }: { id: string }) =>
           await prisma.user.findFirst({ where: { id } }),
       },
+
       posts: {
         type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(Post))),
         resolve: async () => await prisma.post.findMany(),
       },
+
       post: {
         type: Post,
         args: {
@@ -172,10 +215,12 @@ function getSchema(prisma: PrismaClient<Prisma.PrismaClientOptions, never, Defau
         resolve: async (_, { id }: { id: string }) =>
           await prisma.post.findFirst({ where: { id } }),
       },
+
       profiles: {
         type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(Profile))),
         resolve: async () => await prisma.profile.findMany(),
       },
+
       profile: {
         type: Profile,
         args: {
